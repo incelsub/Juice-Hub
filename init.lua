@@ -10,7 +10,7 @@ utils.getfunctionfromgc = function(funcName, targetScript) --> Returns table of 
   local gc = getgc()
   for i=1, #gc do
     local v = gc[i]
-    if (targetScript and getfenv(v).script == targetScript or true) getinfo(v).name == funcName then
+    if (targetScript and getfenv(v).script == targetScript or true) and getinfo(v).name == funcName then
       table.insert(functions, v)
     end
   end
