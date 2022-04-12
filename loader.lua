@@ -1,5 +1,5 @@
 --> Base URL of Juice Hub
-local baseUrl = "https://github.com/incelsub/Juice-Hub/main"
+local baseUrl = "https://raw.githubusercontent.com/incelsub/Juice-Hub/main"
 
 --> Load init script
 loadstring(game:HttpGet(baseUrl .. "/init.lua"))()
