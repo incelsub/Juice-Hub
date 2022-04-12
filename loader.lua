@@ -6,9 +6,9 @@ loadstring(game:HttpGet(baseUrl .. "/init.lua"))()
 
 --> Handler
 local games = {
-  [placeIdHere] = {
-    name = "Game Name Here",
-    url = "/GameNameHere/url-to-script.lua"
+  [4581966615] = {
+    name = "Anomic",
+    url = "/Anomic/main.lua"
   }
 }
 
