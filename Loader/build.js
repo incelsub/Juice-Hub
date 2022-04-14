@@ -110,3 +110,4 @@ final = final.replace(
   crypto.createHash('sha256').update(final).digest('hex'),
 );
 fs.writeFileSync(path.resolve(outFile, '..', 'dist', 'out.lua'), final);
+// not stolen from YieldingCoder#3961 nope nope nope
