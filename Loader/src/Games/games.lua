@@ -1,1 +1,5 @@
+games = {
 
+};
+
+return games;
