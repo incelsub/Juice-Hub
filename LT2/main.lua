@@ -122,7 +122,7 @@ end
 -- [[ Ctrl + Click TP ]] --
 gs("UserInputService").InputBegan:Connect(function(input, gpe)
   if gpe or input.UserInputType ~= Enum.UserInputType.MouseButton1 or not gs("UserInputService"):IsKeyDown(Enum.KeyCode.LeftControl) then return end
-  tp(client:GetMouse().Hit)
+  tp()
 end)
 
 -- [[ AC Bypass ]] --
