@@ -148,7 +148,7 @@ __namecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
   end
 
   -- [[ Prevent Saving ]] --
-  if not checkcaller() and tostring(self) == "RequestSave" and flags.dupeMode then
+  if not checkcaller() and self.Name == "RequestSave" and flags.dupeMode then
     return true
   end
 
@@ -206,6 +206,7 @@ LocalTab.Slider({
 DupeTab.Toggle({
   Text = "Dupe Mode",
   Callback = function(bool)
+    print(bool)
     flags.dupeMode = bool    
   end,
   Enabled = false
