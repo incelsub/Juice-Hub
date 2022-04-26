@@ -167,7 +167,7 @@ end))
 -- // UI
 local Material = loadstring(game:HttpGet("https://raw.githubusercontent.com/incelsub/Juice-Hub/main/ui.lua"))()
 local UI = Material.Load({
-  Title = "Juice Hub (Developer Mode)",
+  Title = "Juice Hub (Beta)",
   Style = 1,
   SizeX = 500,
   SizeY = 350,
