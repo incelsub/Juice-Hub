@@ -10,5 +10,5 @@ if (not game) then
   return game:GetService("Players").LocalPlayer:Kick("This is not a game supported by Juice Hub.")
 end
 
---> Load game script
-loadstring(game:HttpGet("https://raw.githubusercontent.com/incelsub/Juice-Hub/main" .. game.url))()
+--> Load script
+loadstring(game:HttpGet("https://raw.githubusercontent.com/incelsub/Juice-Hub/main" .. game))()
