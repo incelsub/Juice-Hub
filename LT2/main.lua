@@ -1,5 +1,5 @@
 -- // Exploit Check
-if not getsenv or not checkcaller or not hookmetamethod then
+if not getsenv or not checkcaller or not hookmetamethod or not debug or not debug.setupvalue or not debug.getupvalue then
   return game:GetService("Players").LocalPlayer:Kick("Exploit not supported.")
 end
 
@@ -9,9 +9,11 @@ local flags = {
   jp = 50,
   dupeInventory = false,
   dupePickup = false,
-  dupeMode = false
+  dupeMode = false,
+  dupeMoney = false
 }
 
+local UI, dupeModeToggle
 local gs = function(service) return game:GetService(service) end
 local players = gs("Players")
 local client = players.LocalPlayer
@@ -52,7 +54,42 @@ local tp = function(pos)
   end
 end
 
--- [[ Interaction ]] --
+-- [[ Land Functions ]] --
+local propertyPurchasingEnv = getsenv(client.PlayerGui.PropertyPurchasingGUI.PropertyPurchasingClient)
+local oldPurchaseMode = propertyPurchasingEnv.enterPurchaseMode
+
+local getProperty = function(firstPlot)
+  local properties = {}
+  table_foreach(gs("Workspace").Properties:GetChildren(), function(i, v)
+    if v:FindFirstChild("Owner") and v.Owner.Value == nil then
+      properties[#properties + 1] = v
+    end
+  end)
+  if firstPlot then return properties[1] end
+  return properties[math.random(2, #properties)]
+end
+
+local saveSlot = function()
+  if client.CurrentSaveSlot.Value == -1 then return end
+  return gs("ReplicatedStorage").LoadSaveRequests.RequestSave:InvokeServer(client.CurrentSaveSlot.Value, client)
+end
+
+local canLoad = function() 
+  return gs("ReplicatedStorage").LoadSaveRequests.ClientMayLoad:InvokeServer() 
+end
+
+local loadSlot = function(slot, plot)
+  repeat wait() until canLoad()
+  propertyPurchasingEnv.enterPurchaseMode = function(...)
+    debug.setupvalue(propertyPurchasingEnv.rotate, 3, 69)
+    debug.setupvalue(oldPurchaseMode, 10, plot)
+    return
+  end
+  gs("ReplicatedStorage").LoadSaveRequests.RequestLoad:InvokeServer(slot, client)
+  propertyPurchasingEnv.enterPurchaseMode = oldPurchaseMode
+end
+
+-- [[ Dupe Funcs ]] --
 local interact = function(...)
   gs("ReplicatedStorage").Interaction.ClientInteracted:FireServer(...)
 end
@@ -119,6 +156,77 @@ dupeInventory = function(pos)
   end
 end
 
+-- [[ Dupe Money ]] --
+local donateEnv = getsenv(client.PlayerGui.DonateGUI.DonateClient)
+local donateFunc = donateEnv.sendDonation
+
+-- [[ Send Money, I believe ancestor discovered this method, apparently its faster (in my testing, its the same cooldown as the donate remote: 120 seconds) ]] --
+local sendMoney = function(plr, amt)
+  debug.setupvalue(donateFunc, 1, plr)
+  debug.setupvalue(donateFunc, 3, amt)
+  donateFunc()
+end
+
+dupeMoney = function()
+  local currentSlot = client.CurrentSaveSlot.Value
+  local currentMoney = client.leaderstats.Money.Value
+
+  -- [[ Retarded? ]] --
+  if currentSlot == -1 then
+    return UI.Banner({
+      Text = "Please load a slot & try again."
+    })
+  end
+
+  -- [[ No Bitches? ]] --
+  if currentMoney == 0 then
+    return UI.Banner({
+      Text = "You have no money to dupe."
+    })
+  end
+
+  -- [[ Set dupe mode to true ]] --
+  dupeModeToggle:SetState(true)
+
+  -- [[ Wait until we can reload ]] --
+  if not canLoad() then
+    UI.Banner({
+      Text = "Waiting for load cooldown, this may take up to 60 seconds."
+    })
+    repeat wait() until canLoad()
+  end
+
+  -- [[ Send ourselves the money ]] --
+  repeat 
+    task.spawn(sendMoney, client, currentMoney)
+    wait(2.5) 
+  until client.leaderstats.Money.Value == 0
+  
+  UI.Banner({
+    Text = "Reloading."
+  })
+  
+  -- [[ Reload the slot ]] --
+  loadSlot(currentSlot, getProperty())
+  
+  -- [[ Wait until we've reloaded ]] --
+  repeat wait() until client.leaderstats.Money.Value == math.clamp(currentMoney, 0, 20000000)
+  
+  -- [[ Get the money back instantly ]] --
+  task.spawn(function()
+    client.leaderstats.Money:GetPropertyChangedSignal("Value"):Wait()
+    saveSlot()
+    UI.Banner({
+      Text = "Successfully duped money!"
+    })
+    if flags.dupeMoney then
+      dupeMoney()    
+    end
+  end)
+  saveSlot()
+end
+
+
 -- [[ Ctrl + Click TP ]] --
 gs("UserInputService").InputBegan:Connect(function(input, gpe)
   if gpe or input.UserInputType ~= Enum.UserInputType.MouseButton1 or not gs("UserInputService"):IsKeyDown(Enum.KeyCode.LeftControl) then return end
@@ -166,7 +274,7 @@ end))
 
 -- // UI
 local Material = loadstring(game:HttpGet("https://raw.githubusercontent.com/incelsub/Juice-Hub/main/ui.lua"))()
-local UI = Material.Load({
+UI = Material.Load({
   Title = "Juice Hub (Beta)",
   Style = 1,
   SizeX = 500,
@@ -203,7 +311,7 @@ LocalTab.Slider({
 })
 
 -- [[ Dupe Tab ]] --
-DupeTab.Toggle({
+dupeModeToggle = DupeTab.Toggle({
   Text = "Dupe Mode",
   Callback = function(bool)
     print(bool)
@@ -218,7 +326,7 @@ DupeTab.Button({
 })
 
 DupeTab.ChipSet({
-  Text = "Loop Dupe",
+  Text = "InvDupe",
   Callback = function(options)
     flags.dupeInventory = options.Loop
     flags.dupePickup = options.Pickup
@@ -232,6 +340,21 @@ DupeTab.ChipSet({
 DupeTab.Button({
   Text = "Drop Inventory",
   Callback = dropAllTools
+})
+
+DupeTab.Button({
+  Text = "Dupe Money",
+  Callback = dupeMoney
+})
+
+DupeTab.ChipSet({
+  Text = "MoneyDupe",
+  Callback = function(options)
+    flags.dupeMoney = options.Loop
+  end,
+  Options = {
+    Loop = false
+  }
 })
 
 -- [[ Settings Tab ]] --
