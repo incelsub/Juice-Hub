@@ -3,6 +3,13 @@ if not getsenv or not checkcaller or not hookmetamethod or not debug or not debu
   return game:GetService("Players").LocalPlayer:Kick("Exploit not supported.")
 end
 
+if oldHooks then
+  local nc, ni = clonefunction(oldHooks.namecall), clonefunction(oldHooks.newindex)
+  hookmetamethod(game, "__namecall", function(...) return nc(...) end)
+  hookmetamethod(game, "__newindex", function(...) return ni(...) end)
+  getgenv().oldHooks = nil
+end
+
 -- // Variables
 local flags = {
   ws = 16,
@@ -10,7 +17,8 @@ local flags = {
   dupeInventory = false,
   dupePickup = false,
   dupeMode = false,
-  dupeMoney = false
+  dupeMoney = false,
+  dupeSlot = 1
 }
 
 local UI, dupeModeToggle
@@ -65,8 +73,18 @@ local getProperty = function(firstPlot)
       properties[#properties + 1] = v
     end
   end)
-  if firstPlot then return properties[1] end
-  return properties[math.random(2, #properties)]
+  return properties[(firstPlot == true and 1) or (firstPlot == "donate" and #properties) or math.random(2, #properties)]
+end
+
+local getPlrProperty = function(plr)
+  local plr = plr or client
+  local plot
+  table_foreach(gs("Workspace").Properties:GetChildren(), function(i, v)
+    if v:FindFirstChild("Owner") and v.Owner.Value == plr then
+      plot = v
+    end
+  end)
+  return plot
 end
 
 local saveSlot = function()
@@ -78,6 +96,8 @@ local canLoad = function()
   return gs("ReplicatedStorage").LoadSaveRequests.ClientMayLoad:InvokeServer() 
 end
 
+
+-- [[ Fast Load ]] --
 local loadSlot = function(slot, plot)
   repeat wait() until canLoad()
   propertyPurchasingEnv.enterPurchaseMode = function(...)
@@ -87,6 +107,23 @@ local loadSlot = function(slot, plot)
   end
   gs("ReplicatedStorage").LoadSaveRequests.RequestLoad:InvokeServer(slot, client)
   propertyPurchasingEnv.enterPurchaseMode = oldPurchaseMode
+end
+
+-- [[ Free Land ]] --
+local freeLand = function(donatingPlot)
+  if getPlrProperty() then
+    UI.Banner({
+      Text = "You already have a piece of land!"
+    })
+    return false
+  end
+
+  local property = getProperty(donatingPlot)
+  gs("ReplicatedStorage").PropertyPurchasing.SetPropertyPurchasingValue:InvokeServer(true)
+  gs("ReplicatedStorage").PropertyPurchasing.ClientPurchasedProperty:FireServer(property, property.OriginSquare.Position)
+  gs("ReplicatedStorage").PropertyPurchasing.SetPropertyPurchasingValue:InvokeServer(false)
+  tp(property.OriginSquare.Position)
+  return true
 end
 
 -- [[ Dupe Funcs ]] --
@@ -226,6 +263,33 @@ dupeMoney = function()
   saveSlot()
 end
 
+-- [[ Donate Plot ]] --
+local donatePlot = function(slotNum)
+  local slotNum = math.clamp(slotNum, 1, 6)
+  if getPlrProperty() then 
+    return UI.Banner({
+      Text = "Please unload your slot & try again."
+    })
+  end
+  task.delay(0.1, function()
+    freeLand(true)
+  end)
+  loadSlot(slotNum, getProperty("donate"))
+  UI.Banner({
+    Text = "Slot loaded, waiting for reload cooldown."
+  })
+  repeat wait(1) until canLoad()
+  UI.Banner({
+    Text = "Unloading slot, please wait."
+  })
+  gs("ReplicatedStorage").Interaction.ClientSetListPlayer:InvokeServer(client.WhitelistFolder, client, true)
+  gs("ReplicatedStorage").LoadSaveRequests.RequestLoad:InvokeServer(-1)
+  UI.Banner({
+    Text = "Success! Whitelist your friend & tell them to load over top of your base."
+  })
+  gs("ReplicatedStorage").Interaction.ClientSetListPlayer:InvokeServer(client.WhitelistFolder, client, false)
+end
+
 
 -- [[ Ctrl + Click TP ]] --
 gs("UserInputService").InputBegan:Connect(function(input, gpe)
@@ -243,8 +307,9 @@ local fuckBanSystem = function()
 end
 
 -- // MT Hooks
--- [[ __namecall ]] -- 
-__namecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
+-- [[ __namecall ]] --
+getgenv().oldHooks = {} 
+getgenv().oldHooks.namecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
   -- [[ Anti Kick ]] --
   if getnamecallmethod() == "Kick" then
     return wait(9e9)
@@ -260,16 +325,16 @@ __namecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
     return true
   end
 
-  return __namecall(self, ...)
+  return oldHooks.namecall(self, ...)
 end))
 
 -- [[ __newindex ]] -- 
-__newindex = hookmetamethod(game, "__newindex", newcclosure(function(self, index, value)
+getgenv().oldHooks.newindex = hookmetamethod(game, "__newindex", newcclosure(function(self, index, value)
   -- [[ Walkspeed ]] --
   if not checkcaller() and self == client.Character.Humanoid and index == "WalkSpeed" and value ~= 0 then
     value = flags.ws
   end
-  return __newindex(self, index, value)
+  return oldHooks.newindex(self, index, value)
 end))
 
 -- // UI
@@ -285,6 +350,8 @@ UI = Material.Load({
 -- [[ Tabs ]] --
 local LocalTab = UI.New({ Title = "Local" })
 local DupeTab = UI.New({ Title = "Dupe" })
+local DonateTab = UI.New({ Title = "Donate" })
+local LandTab = UI.New({ Title = "Land" })
 local SettingsTab = UI.New({ Title = "Settings" })
 
 -- [[ Local Tab ]] --
@@ -357,13 +424,42 @@ DupeTab.ChipSet({
   }
 })
 
+-- [[ Donate Tab ]] --
+DonateTab.Slider({
+  Text = "Slot",
+  Callback = function(value)
+    flags.dupeSlot = value
+  end,
+  Min = 1,
+  Max = 6,
+  Def = flags.dupeSlot
+})
+
+DonateTab.Button({
+  Text = "Donate Base",
+  Callback = function()
+    donatePlot(flags.dupeSlot)    
+  end
+})
+
+-- [[ Land Tab ]] --
+LandTab.Button({
+  Text = "Free Land",
+  Callback = freeLand
+})
+
 -- [[ Settings Tab ]] --
 SettingsTab.Button({
   Text = "Unload Script",
   Callback = function()
-    hookmetamethod(game, "__namecall", newcclosure(function(...) return __namecall(...) end))
-    hookmetamethod(game, "__newindex", newcclosure(function(...) return __newindex(...) end))
+    hookmetamethod(game, "__namecall", newcclosure(function(...) return oldHooks.namecall(...) end))
+    hookmetamethod(game, "__newindex", newcclosure(function(...) return oldHooks.newindex(...) end))
+    getgenv().oldHooks = nil
     table_foreach(connections, function(_, v) v:Disconnect() end)
     pcall(function() OldInstance:Destroy() end)
   end
+})
+
+UI.Banner({
+  Text = "Welcome, " .. client.DisplayName .. "!\nJuice Hub (LT2) was developed by 0x37."
 })
