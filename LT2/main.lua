@@ -33,6 +33,21 @@ connections[1] = client.CharacterAdded:Connect(function(character)
   character.Humanoid.WalkSpeed = flags.ws
 end)
 
+-- // Remote Grabber
+local remotes = {
+  events = {},
+  functions = {}
+}
+
+local gameDescendants = game:GetDescendants()
+for i=1, #gameDescendants do
+  local v = gameDescendants[i]
+  local dir = (v.ClassName == "RemoteEvent" and "events" or v.ClassName == "RemoteFunction" and "functions")
+  if dir then 
+    remotes[dir][v.Name] = v 
+  end
+end
+
 -- // Functions
 
 -- [[ Using numerical loops is quicker than regular table.foreach & iterating over pairs apparently, source: Ancestor ]] --
@@ -89,11 +104,11 @@ end
 
 local saveSlot = function()
   if client.CurrentSaveSlot.Value == -1 then return end
-  return gs("ReplicatedStorage").LoadSaveRequests.RequestSave:InvokeServer(client.CurrentSaveSlot.Value, client)
+  return remotes.functions.RequestSave:InvokeServer(client.CurrentSaveSlot.Value, client)
 end
 
 local canLoad = function() 
-  return gs("ReplicatedStorage").LoadSaveRequests.ClientMayLoad:InvokeServer() 
+  return remotes.functions.ClientMayLoad:InvokeServer() 
 end
 
 
@@ -105,7 +120,7 @@ local loadSlot = function(slot, plot)
     debug.setupvalue(oldPurchaseMode, 10, plot)
     return
   end
-  gs("ReplicatedStorage").LoadSaveRequests.RequestLoad:InvokeServer(slot, client)
+  remotes.functions.RequestLoad:InvokeServer(slot, client)
   propertyPurchasingEnv.enterPurchaseMode = oldPurchaseMode
 end
 
@@ -119,16 +134,16 @@ local freeLand = function(donatingPlot)
   end
 
   local property = getProperty(donatingPlot)
-  gs("ReplicatedStorage").PropertyPurchasing.SetPropertyPurchasingValue:InvokeServer(true)
-  gs("ReplicatedStorage").PropertyPurchasing.ClientPurchasedProperty:FireServer(property, property.OriginSquare.Position)
-  gs("ReplicatedStorage").PropertyPurchasing.SetPropertyPurchasingValue:InvokeServer(false)
+  remotes.functions.SetPropertyPurchasingValue:InvokeServer(true)
+  remotes.events.ClientPurchasedProperty:FireServer(property, property.OriginSquare.Position)
+  remotes.functions.SetPropertyPurchasingValue:InvokeServer(false)
   tp(property.OriginSquare.Position)
   return true
 end
 
 -- [[ Dupe Funcs ]] --
 local interact = function(...)
-  gs("ReplicatedStorage").Interaction.ClientInteracted:FireServer(...)
+  remotes.events.ClientInteracted:FireServer(...)
 end
 
 -- [[ Dupe Inventory ]] --
@@ -282,14 +297,125 @@ local donatePlot = function(slotNum)
   UI.Banner({
     Text = "Unloading slot, please wait."
   })
-  gs("ReplicatedStorage").Interaction.ClientSetListPlayer:InvokeServer(client.WhitelistFolder, client, true)
-  gs("ReplicatedStorage").LoadSaveRequests.RequestLoad:InvokeServer(-1)
+  remotes.functions.ClientSetListPlayer:InvokeServer(client.WhitelistFolder, client, true)
+  remotes.functions.RequestLoad:InvokeServer(-1)
   UI.Banner({
     Text = "Success! Whitelist your friend & tell them to load over top of your base."
   })
-  gs("ReplicatedStorage").Interaction.ClientSetListPlayer:InvokeServer(client.WhitelistFolder, client, false)
+  remotes.functions.ClientSetListPlayer:InvokeServer(client.WhitelistFolder, client, false)
 end
 
+-- [[ Autobuy ]] --
+
+local moveItem = function(item, cframe)
+  remotes.events.ClientIsDragging:FireServer(item)
+  item.Main.CFrame = cframe
+end
+
+local distanceBetween = function(pos1, pos2)
+  return (pos1 - pos2).Magnitude
+end
+
+-- // Grab NPCs
+local npcList = {}
+local requiredNpcs = {"WoodRUs", "CarStore", "FurnitureStore", "ShackShop", "LogicStore", "FineArt"}
+
+local count = 0
+local npcGrab = remotes.events.PromptChat.OnClientEvent:Connect(function(_, npc)
+	if table.find(requiredNpcs, npc.Character.Parent.Name) and not npcList[npc.Character.Parent.Name] then
+		count = count + 1
+		npcList[npc.Character.Parent.Name] = npc
+	end
+end)
+
+remotes.functions.SetChattingValue:InvokeServer(1)
+repeat wait() until count == #requiredNpcs
+npcGrab:Disconnect()
+remotes.functions.SetChattingValue:InvokeServer(0)
+
+-- [[ Items ]] --
+local stores = {
+	WoodRUs = {Items = workspace.Stores:FindFirstChild("WorkLight", true).Parent, NPC = npcList.WoodRUs},
+	CarStore = {Items = workspace.Stores:FindFirstChild("Trailer2", true).Parent, NPC = npcList.CarStore},
+	FurnitureStore = {Items = workspace.Stores:FindFirstChild("Bed1", true).Parent, NPC = npcList.FurnitureStore},
+	ShackShop = {Items = workspace.Stores:FindFirstChild("Dynamite", true).Parent, NPC = npcList.ShackShop},
+	LogicStore = {Items = workspace.Stores:FindFirstChild("SignalDelay", true).Parent, NPC = npcList.LogicStore},
+	FineArt = {Items = workspace.Stores:FindFirstChild("Painting1", true).Parent, NPC = npcList.FineArt}
+}
+
+local itemInfo, visualItems = {}, {}
+
+local getItemModel = function(item)
+	return gs("ReplicatedStorage").Purchasables:FindFirstChild(item.Name, true)
+end
+
+for _, v in pairs(stores) do
+  table_foreach(v.Items:GetChildren(), function(i, v)
+    local itemModel = getItemModel(v)
+    if not itemModel:FindFirstChild("WoodCost") and not table.find(visualItems, itemModel.ItemName.Value) then
+      itemInfo[itemModel.ItemName.Value] = { Name = v.Name, Price = itemModel.Price.Value }
+      visualItems[#visualItems + 1] = itemModel.ItemName.Value
+    end
+  end)
+end
+
+local findStoreByItem = function(itemName)
+  local storesWithItem = {}
+  for i,v in next, stores do
+    local stock = 0
+    for _, item in next, v.Items:GetChildren() do
+      if item.Name == itemName then
+        stock = stock + 1
+      end
+    end
+    storesWithItem[#storesWithItem + 1] = {store = i, stock = stock} 
+  end
+
+  table.sort(storesWithItem, function(a, b)
+    return a.stock > b.stock
+  end)
+
+  return storesWithItem[1]
+end
+
+local buyItem = function(item, quantity)
+  local itemInfo = itemInfo[item]
+  local store = findStoreByItem(itemInfo.Name).store
+
+  if not store then return false, "Failed to find item." end
+
+  local totalPrice = itemInfo.Price * quantity
+
+  if totalPrice > client.leaderstats.Money.Value then
+		return false, "You can't afford this, you need $" .. totalPrice .. " in total."
+  end
+
+  local oldPosition = client.Character.Humanoid.RootPart.Position
+	local items = stores[store].Items
+	local counter = workspace.Stores[store].Counter
+
+  for i=1, quantity do
+    local item = items:WaitForChild(itemInfo.Name)
+    item:WaitForChild("Main")
+    if distanceBetween(client.Character.HumanoidRootPart.Position, item.Main.Position) > 50 then
+			tp(item.Main.Position + Vector3.new(5, 5, 0))
+			task.wait()
+		end
+
+    repeat
+      moveItem(item, (counter.CFrame * CFrame.new(0, 0.3, 0)) * CFrame.Angles(0, 90, 0))
+			remotes.functions.PlayerChatted:InvokeServer({ID = stores[store].NPC.ID, Name = stores[store].NPC.Name}, "ConfirmPurchase")
+			task.wait()
+		until item.Parent ~= items
+    repeat 
+      moveItem(item, CFrame.new(oldPosition + Vector3.new(5, 0, 0)))
+      task.wait()
+    until task.wait(0.4)
+  end
+
+  tp(oldPosition)
+  return true, "Finished Autobuy!"
+end
 
 -- [[ Ctrl + Click TP ]] --
 gs("UserInputService").InputBegan:Connect(function(input, gpe)
@@ -303,7 +429,7 @@ debug.setupvalue(acEnv.ban, 1, true)
 
 -- [[ CALL FUNCTION AT RISK, IT WILL FLOOD BAN SYSTEM, PREVENTING ANYONE FROM BEING BANNED IN LT2! ]] --
 local fuckBanSystem = function()
-  gs("ReplicatedStorage").Interaction.Ban:FireServer(("a"):rep(1048576 * 3.99))
+  remotes.events.Ban:FireServer(("a"):rep(1048576 * 3.99))
 end
 
 -- // MT Hooks
@@ -352,6 +478,7 @@ local LocalTab = UI.New({ Title = "Local" })
 local DupeTab = UI.New({ Title = "Dupe" })
 local DonateTab = UI.New({ Title = "Donate" })
 local LandTab = UI.New({ Title = "Land" })
+local AutobuyTab = UI.New({ Title = "Autobuy" })
 local SettingsTab = UI.New({ Title = "Settings" })
 
 -- [[ Local Tab ]] --
@@ -446,6 +573,43 @@ DonateTab.Button({
 LandTab.Button({
   Text = "Free Land",
   Callback = freeLand
+})
+
+-- [[ Autobuy Tab ]] --
+
+flags.buyItem = visualItems[1]
+AutobuyTab.Dropdown({
+  Text = "Item",
+  Callback = function(value)
+    flags.buyItem = value
+  end,
+  Options = visualItems
+})
+
+flags.buyQuantity = 1
+AutobuyTab.Slider({
+  Text = "Quantity",
+  Min = 1,
+  Max = 100,
+  Def = 1,
+  Callback = function(value)
+    flags.buyQuantity = value
+  end
+})
+
+AutobuyTab.Button({
+  Text = "Purchase",
+  Callback = function()
+    local success, msg = buyItem(flags.buyItem, flags.buyQuantity)
+    if not success then
+      return UI.Banner({
+        Text = "Error! " .. msg
+      })
+    end
+    UI.Banner({
+      Text = "Successfully bought items."
+    })
+  end
 })
 
 -- [[ Settings Tab ]] --
