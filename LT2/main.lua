@@ -187,7 +187,6 @@ end
 
 dupeInventory = function(pos)
   local pos = pos or getCFrame()
-  client.Character.Head:Destroy()
   local tools = {}
   toolFilter = gs("Workspace").PlayerModels.ChildAdded:Connect(function(child)
     local owner = child:WaitForChild("Owner", 5)
@@ -197,6 +196,7 @@ dupeInventory = function(pos)
     end
   end)
   dropAllTools(pos)
+  client.Character.Head:Destroy()
   task.delay(5, function() toolFilter:Disconnect() end)
   client.CharacterAdded:Wait()
   client.Character:WaitForChild("HumanoidRootPart")
