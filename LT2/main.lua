@@ -84,6 +84,16 @@ local tp = function(pos)
   end
 end
 
+-- [[ Temp Blueprints ]] --
+local getAllBlueprints = function()
+    local playerBlueprints = game:GetService('Players').LocalPlayer.PlayerBlueprints.Blueprints
+    for _, v in next, game:GetService('ReplicatedStorage').ClientItemInfo:GetChildren() do
+        if v:FindFirstChild('WoodCost') and not playerBlueprints:FindFirstChild(v.Name) then
+            v:Clone().Parent = playerBlueprints
+        end
+    end
+end
+
 -- [[ Land Functions ]] --
 local propertyPurchasingEnv = getsenv(client.PlayerGui.PropertyPurchasingGUI.PropertyPurchasingClient)
 local oldPurchaseMode = propertyPurchasingEnv.enterPurchaseMode
@@ -353,7 +363,7 @@ local stores = {
 local itemInfo, visualItems = {}, {}
 
 local getItemModel = function(item)
-	return gs("ReplicatedStorage").ClientItemInfo:FindFirstChild(item.Name, true)
+	return gs("ReplicatedStorage").ClientItemInfo:FindFirstChild(item.Name)
 end
 
 for _, v in pairs(stores) do
@@ -691,6 +701,11 @@ LocalTab.Slider({
   Min = 0,
   Max = 500,
   Def = flags.jp
+})
+
+LocalTab.Button({
+  Text = "Temp Blueprints",
+  Callback = getAllBlueprints
 })
 
 -- [[ Dupe Tab ]] --
