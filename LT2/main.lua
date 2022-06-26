@@ -353,7 +353,7 @@ local stores = {
 local itemInfo, visualItems = {}, {}
 
 local getItemModel = function(item)
-	return gs("ReplicatedStorage").Purchasables:FindFirstChild(item.Name, true)
+	return gs("ReplicatedStorage").ClientItemInfo:FindFirstChild(item.Name, true)
 end
 
 for _, v in pairs(stores) do
@@ -446,7 +446,7 @@ local getToolStats = function(toolName)
     print(toolName)
 	toolName = toolName.ToolName.Value
   end
-  return require(gs("ReplicatedStorage").Purchasables.Tools.AllTools[toolName].AxeClass).new()
+  return require(gs("ReplicatedStorage").AxeClasses['AxeClass_' .. toolName]).new()
 end
 
 local getBestAxe = function(treeClass)
