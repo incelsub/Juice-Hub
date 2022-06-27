@@ -181,20 +181,6 @@ local dropTool = function(tool, pos)
   interact(tool, "Drop tool", pos)
 end
 
-local dropAllTools = function(pos)
-  table_foreach(client.Backpack:GetChildren(), function(i, v)
-    dropTool(v, pos)
-  end)
-end
-
-local pickupTool = function(tool)
-  if #getTools() >= 9 then return end
-  tp(tool.Main.CFrame)
-  task.wait(0.35)
-  interact(tool, "Pick up tool")
-  task.wait(0.35)
-end
-
 dupeInventory = function(pos)
   local pos = pos or getCFrame()
   local tools = {}
@@ -205,9 +191,17 @@ dupeInventory = function(pos)
       tools[#tools + 1] = child
     end
   end)
-  dropAllTools(pos)
+  local toolToDupe = client.Backpack:FindFirstChild('Tool');
+  if not toolToDupe then
+    return UI.Banner({
+      Text = 'Please pick up an axe to dupe.'
+    })
+  end
+  toolToDupe.Parent = client.Character
+  dropTool(toolToDupe, pos)
+  task.wait()
   client.Character.Head:Destroy()
-  task.delay(5, function() toolFilter:Disconnect() end)
+  task.delay(3, function() toolFilter:Disconnect() end)
   client.CharacterAdded:Wait()
   client.Character:WaitForChild("HumanoidRootPart")
   if flags.dupePickup and #getTools() <= 9 then
@@ -324,13 +318,23 @@ end
 
 -- [[ Autobuy ]] --
 
-local moveItem = function(item, cframe)
-  remotes.events.ClientIsDragging:FireServer(item)
-  item.Main.CFrame = cframe
-end
+local moveItem = function(item, position)
+  for i=1, 5 do
+    remotes.events.ClientIsDragging:FireServer(item);
+    item.Main.CFrame = CFrame.new(position) * CFrame.Angles(90, 0, 0);
+    task.wait()
+  end;
+end;
 
 local distanceBetween = function(pos1, pos2)
   return (pos1 - pos2).Magnitude
+end
+
+local distanceFromClient = function(partOrPos)
+  if typeof(partOrPos) ~= 'Vector3' then
+    partOrPos = partOrPos.Position
+  end
+  return (getPosition() - partOrPos).Magnitude;
 end
 
 -- // Grab NPCs
@@ -361,7 +365,6 @@ local stores = {
 }
 
 local itemInfo, visualItems = {}, {}
-
 local getItemModel = function(item)
 	return gs("ReplicatedStorage").ClientItemInfo:FindFirstChild(item.Name)
 end
@@ -395,43 +398,69 @@ local findStoreByItem = function(itemName)
   return storesWithItem[1]
 end
 
+local purchase = function(store)
+  remotes.functions.PlayerChatted:InvokeServer(stores[store].NPC, "ConfirmPurchase");
+end;
+
 local buyItem = function(item, quantity)
-  local itemInfo = itemInfo[item]
-  local store = findStoreByItem(itemInfo.Name).store
+	local currentPosition = getPosition();
+  local itemModel = itemInfo[item];
+  print(itemModel)
+	local store = findStoreByItem(itemModel.Name).store;
+  local storeTable = stores[store];
+	local storeItems = storeTable.Items
+	local counter = workspace.Stores[store].Counter;
+  print(storeItems)
+  local finishedBuy = false;
+	local totalBought = 0;
+	local queueConnection;
+	local queue = {};
 
-  if not store then return false, "Failed to find item." end
-
-  local totalPrice = itemInfo.Price * quantity
-
-  if totalPrice > client.leaderstats.Money.Value then
-		return false, "You can't afford this, you need $" .. totalPrice .. " in total."
-  end
-
-  local oldPosition = client.Character.Humanoid.RootPart.Position
-	local items = stores[store].Items
-	local counter = workspace.Stores[store].Counter
-
-  for i=1, quantity do
-    local item = items:WaitForChild(itemInfo.Name)
-    item:WaitForChild("Main")
-    if distanceBetween(client.Character.HumanoidRootPart.Position, item.Main.Position) > 50 then
-			tp(item.Main.Position + Vector3.new(5, 5, 0))
-			task.wait()
+	local purchaseItem = function(item, val)
+		if (distanceFromClient(item.Main) > 50) then
+			tp(item.Main.Position);
+		end;
+		local currentParent = item.Parent
+		repeat 
+			moveItem(item, counter.Position);
+		until item.Parent ~= currentParent
+		if item.Parent ~= workspace.PlayerModels then
+			table.remove(queue, val) 
+		else
+			totalBought = totalBought + 1
+			if totalBought == quantity then
+				queueConnection:Disconnect()
+				finishedBuy = true
+			end
+			for i=1, 4 do
+				moveItem(item, currentPosition + Vector3.new(0, 5, 0))
+			end
 		end
+	end
 
-    repeat
-      moveItem(item, (counter.CFrame * CFrame.new(0, 0.3, 0)) * CFrame.Angles(0, 90, 0))
-			remotes.functions.PlayerChatted:InvokeServer({ID = stores[store].NPC.ID, Name = stores[store].NPC.Name}, "ConfirmPurchase")
-			task.wait()
-		until item.Parent ~= items
-    repeat 
-      moveItem(item, CFrame.new(oldPosition + Vector3.new(5, 0, 0)))
-      task.wait()
-    until task.wait(0.4)
-  end
+	queueConnection = storeItems.ChildAdded:Connect(function(child)
+		if tostring(child) == itemModel.Name then
+			child:WaitForChild('Main');
+			if quantity > #queue then
+				queue[#queue + 1] = child
+				task.spawn(purchaseItem, child, #queue)
+			end;
+		end;
+	end);
 
-  tp(oldPosition)
-  return true, "Finished Autobuy!"
+	for _, v in pairs(storeItems:GetChildren()) do
+		if tostring(v) == itemModel.Name then
+			if quantity > #queue then
+				queue[#queue + 1] = v
+				task.spawn(purchaseItem, v, #queue)
+			end;
+		end;
+	end;
+	repeat 
+    task.wait(); 
+    purchase(store);
+  until finishedBuy
+	tp(currentPosition);
 end
 
 -- [[ Ctrl + Click TP ]] --
