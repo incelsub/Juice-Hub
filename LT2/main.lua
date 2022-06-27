@@ -617,7 +617,7 @@ local bringTree = function(treeClass)
   treeListener(treeClass, function(tree)
 	tree.PrimaryPart = tree:FindFirstChild("WoodSection")
 	treeCut = true
-	for i=1, 14 do
+	for i=1, 30 do
 	  remotes.events.ClientIsDragging:FireServer(tree.WoodSection)
 	  tree:MoveTo(oldPosition)
 	  wait()
