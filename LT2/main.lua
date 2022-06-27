@@ -619,7 +619,6 @@ local bringTree = function(treeClass)
 	treeCut = true
 	for i=1, 14 do
 	  remotes.events.ClientIsDragging:FireServer(tree.WoodSection)
-	  remotes.events.ClientRequestOwnership:FireServer(tree.WoodSection)
 	  tree:MoveTo(oldPosition)
 	  wait()
 	end
