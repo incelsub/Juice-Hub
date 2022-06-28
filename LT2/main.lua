@@ -457,7 +457,7 @@ local buyItem = function(item, quantity)
 		end;
 	end;
 	repeat 
-    task.wait(); 
+    task.wait(1); 
     purchase(store);
   until finishedBuy
 	tp(currentPosition);
@@ -617,10 +617,10 @@ local bringTree = function(treeClass)
   treeListener(treeClass, function(tree)
 	tree.PrimaryPart = tree:FindFirstChild("WoodSection")
 	treeCut = true
-	for i=1, 30 do
+	for i=1, 60 do
 	  remotes.events.ClientIsDragging:FireServer(tree.WoodSection)
 	  tree:MoveTo(oldPosition)
-	  wait()
+	  task.wait()
 	end
 	task.wait(0.15)
 	if treeClass == "LoneCave" then
